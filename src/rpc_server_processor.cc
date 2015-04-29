@@ -1,7 +1,5 @@
 #include "io/io_buf.h"
-#include "io/input_buf.h"
-#include "io/output_buf.h"
-#include "io/connection.h"
+#include "async/connection.h"
 
 #include "handler_map.h"
 #include "rpc_processor.h"
@@ -70,20 +68,16 @@ void ReplyObject::buildData(const MessageHeader& header) {
 }
 namespace rpc {
 
-RpcServerProcessor::~RpcServerProcessor() {
-}
-
-void RpcServerProcessor::process(io::Connection* conn, io::InputBuf* input_buf,
+void RpcServerProcessor::process(async::Connection* conn,
+                                 io::InputStream* input_stream,
                                  const TimeStamp& time_stamp) {
-  const MessageHeader& header = GetRpcHeaderFromConnection(conn);
-  MethodHandler * method_handler = handler_map_->FindMehodById(header.fun_id);
+  const MessageHeader* header = GetRpcHeaderFromConnection(conn);
+  MethodHandler* method_handler = handler_map_->FindMehodById(header->fun_id);
   if (method_handler == NULL) {
-    LOG(WARNING)<< "can't find handler, id: " << header.fun_id;
+    LOG(WARNING)<< "can't find handler, id: " << header->fun_id;
     return;
   }
 
-  // maybe should skip length of header.
-  DCHECK_EQ(input_buf->ByteCount(), RPC_HEADER_LENGTH);
   scoped_ptr<Message> req(method_handler->request->New());
   scoped_ptr<InputStream> input_stream(new InputStream(input_buf));
   bool ret = req->ParseFromZeroCopyStream(input_stream.get());
@@ -99,13 +93,12 @@ void RpcServerProcessor::process(io::Connection* conn, io::InputBuf* input_buf,
                                       new ReplyClosure(conn, header, reply));
 }
 
-RpcServerProcessor::ReplyClosure::ReplyClosure(io::Connection* conn,
+RpcServerProcessor::ReplyClosure::ReplyClosure(async::Connection* conn,
                                                const MessageHeader& header,
                                                Message* reply)
     : hdr_(header), reply_(reply), conn_(conn) {
   DCHECK_NOTNULL(conn);
   DCHECK_NOTNULL(reply);
-
   conn->Ref();
 }
 
@@ -115,8 +108,7 @@ RpcServerProcessor::ReplyClosure::~ReplyClosure() {
 void RpcServerProcessor::ReplyClosure::Run() {
   io::OutputObject* obj = new io::OutVectorObject(
       new ReplyObject(hdr_, reply_.release()));
-  conn_->Send(obj);
-
+  conn_->send(obj);
   delete this;
 }
 

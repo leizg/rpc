@@ -3,7 +3,7 @@
 
 #include "rpc_response_handler.h"
 
-namespace io {
+namespace async {
 class Protocol;
 class TcpClient;
 }

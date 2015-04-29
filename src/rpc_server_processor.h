@@ -1,29 +1,28 @@
-#ifndef RPC_SERVER_PROCESSOR_H_
-#define RPC_SERVER_PROCESSOR_H_
+#pragma once
 
 #include "rpc_processor.h"
 
 namespace rpc {
 class HandlerMap;
 
-// TODO: 1. retransmit rpc.
 class RpcServerProcessor : public RpcProcessor::Delegate {
   public:
     explicit RpcServerProcessor(HandlerMap* handler_map)
         : handler_map_(handler_map) {
       DCHECK_NOTNULL(handler_map);
     }
-    virtual ~RpcServerProcessor();
+    virtual ~RpcServerProcessor() {
+    }
 
   private:
-    HandlerMap* handler_map_;
+    const HandlerMap* handler_map_;
 
-    virtual void process(io::Connection* conn, io::InputBuf* input_buf,
+    virtual void process(async::Connection* conn, io::InputStream* input_stream,
                          const TimeStamp& time_stamp);
 
     class ReplyClosure : public ::google::protobuf::Closure {
       public:
-        ReplyClosure(io::Connection* conn, const MessageHeader& header,
+        ReplyClosure(async::Connection* conn, const MessageHeader& header,
                      Message* reply);
         virtual ~ReplyClosure();
 
@@ -31,7 +30,7 @@ class RpcServerProcessor : public RpcProcessor::Delegate {
         const MessageHeader hdr_;
         scoped_ptr<Message> reply_;
 
-        scoped_ref<io::Connection> conn_;
+        scoped_ref<async::Connection> conn_;
 
         virtual void Run();
 
@@ -41,4 +40,3 @@ class RpcServerProcessor : public RpcProcessor::Delegate {
     DISALLOW_COPY_AND_ASSIGN(RpcServerProcessor);
 };
 }
-#endif  // RPC_SERVER_PROCESSOR_H_

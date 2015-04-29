@@ -6,29 +6,41 @@
 
 namespace rpc {
 
-struct MethodHandler {
-    ~MethodHandler();
+class MethodHandler {
+  public:
+    MethodHandler()
+        : service(nullptr), method(nullptr), request(nullptr), reply(nullptr) {
+    }
+    ~MethodHandler() {
+      delete request;
+      delete reply;
+    }
 
     Service* service;  // shouldn't delete service.
     const MethodDescriptor* method;  // shouldn't delete method.
 
     const Message* request;
     const Message* reply;
+
+  private:
+    DISALLOW_COPY_AND_ASSIGN(MethodHandler);
 };
 
 class HandlerMap {
   public:
-    explicit HandlerMap(Service* serv = NULL) {
-      if (serv != NULL) {
+    explicit HandlerMap(Service* serv = nullptr) {
+      if (serv != nullptr) {
         AddService(serv);
       }
     }
-    ~HandlerMap();
+    ~HandlerMap() {
+      STLMapClear(&serv_map_);
+    }
 
-    void AddService(Service* serv);
+    bool AddService(Service* serv);
 
     MethodHandler* FindMehodById(uint32 id) const {
-      ServMap::const_iterator it = serv_map_.find(id);
+      auto it = serv_map_.find(id);
       if (it != serv_map_.end()) {
         return it->second;
       }
