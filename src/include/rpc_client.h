@@ -4,11 +4,10 @@
 
 namespace async {
 class Protocol;
-class RpcChannelProxy;
+class AsyncClient;
 }
 
 namespace rpc {
-class RpcChannel;
 class HandlerMap;
 
 // todo: multi-Connections per Channel.
@@ -34,11 +33,10 @@ class RpcClient : public ::google::protobuf::RpcChannel,
     // time_out: unit: seconds
     // ip: it's caller's responsity that make sure ip is good format.
     bool connect(uint32 time_out);
-    void setHandlerMap(HandlerMap* handler_map);
 
   protected:
     // ev_mgr should have been initialized successfully.
-    explicit RpcClient(async::EventManager* ev_mgr);
+    RpcClient(async::EventManager* ev_mgr, HandlerMap* handler_map);
 
     virtual bool reconnectInternal(uint32 timeout) = 0;
 
@@ -46,6 +44,7 @@ class RpcClient : public ::google::protobuf::RpcChannel,
     async::EventManager* ev_mgr_;
     scoped_ptr<HandlerMap> handler_map_;
 
+    Mutex mutex_;
     scoped_ptr<async::Protocol> protocol_;
     scoped_ptr<async::AsyncClient> client_;
 
@@ -53,7 +52,7 @@ class RpcClient : public ::google::protobuf::RpcChannel,
 
     // by google::protobuf::RpcChannel.
     // called by Service::Stub.
-    scoped_ptr<RpcChannelProxy> channel_proxy_;
+    scoped_ptr<::google::protobuf::RpcChannel> impl_;
     virtual void CallMethod(const ::google::protobuf::MethodDescriptor* method,
                             ::google::protobuf::RpcController* controller,
                             const ::google::protobuf::Message* request,
@@ -70,8 +69,9 @@ class RpcClient : public ::google::protobuf::RpcChannel,
 
 class RpcLocalClient : public RpcClient {
   public:
-    RpcLocalClient(async::EventManager* ev_mgr, const std::string& path)
-        : RpcClient(ev_mgr), path_(path) {
+    RpcLocalClient(async::EventManager* ev_mgr, HandlerMap* handler_map,
+                   const std::string& path)
+        : RpcClient(ev_mgr, handler_map), path_(path) {
       DCHECK(!path.empty());
     }
     virtual ~RpcLocalClient() {
@@ -91,10 +91,11 @@ class RpcLocalClient : public RpcClient {
 
 class RpcTcpClient : public RpcClient {
   public:
-    RpcTcpClient(async::EventManager* ev_mgr, const std::string& ip,
-                 uint16 port)
-        : RpcClient(ev_mgr), ip_(ip), port_(port) {
+    RpcTcpClient(async::EventManager* ev_mgr, HandlerMap* handler_map,
+                 const std::string& ip, uint16 port)
+        : RpcClient(ev_mgr, handler_map), ip_(ip) {
       DCHECK(!ip.empty());
+      port_ = port;
     }
     virtual ~RpcTcpClient() {
     }

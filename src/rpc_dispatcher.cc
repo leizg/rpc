@@ -92,15 +92,16 @@ void RpcResponseDispatcher::dispatch(async::Connection* conn,
                                      const TimeStamp& time_stamp) {
   const MessageHeader* header = GetRpcHeaderFromConnection(conn);
   ClientCallback* cb;
-  if (cb_finder_->find(header->id, &cb)) {
+  if (!cb_finder_->find(header->id, &cb)) {
     delete input_stream;
-    LOG(WARNING) << "unknown id: " << header->id;
+    LOG(WARNING)<< "unknown id: " << header->id;
     return;
   }
 
   scoped_ptr<InputStream> stream(new InputStream(input_stream));
-  if (!cb->getResponse()->ParseFromZeroCopyStream(stream.get())) {
-    LOG(WARNING) << "parse error: " << cb->getMethod()->DebugString();
+  bool ret = cb->getResponse()->ParseFromZeroCopyStream(stream.get());
+  if (!ret) {
+    LOG(WARNING)<< "parse error: " << cb->getMethod()->DebugString();
     return;
   }
   cb->Run();

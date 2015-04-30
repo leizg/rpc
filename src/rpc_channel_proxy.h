@@ -15,13 +15,6 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
   public:
     virtual ~RpcChannelProxy();
 
-    // handle request.
-    virtual void CallMethod(const ::google::protobuf::MethodDescriptor* method,
-                            ::google::protobuf::RpcController* controller,
-                            const ::google::protobuf::Message* request,
-                            ::google::protobuf::Message* response,
-                            ::google::protobuf::Closure* done);
-
     class Sender {
       public:
         virtual ~Sender() {
@@ -29,6 +22,7 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
 
         virtual void send(io::OutputObject* object) = 0;
     };
+
     explicit RpcChannelProxy(Sender* sender);
 
   private:
@@ -39,17 +33,12 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
     typedef std::map<uint64, ClientCallback*> CallbackMap;
     CallbackMap call_back_map_;
 
-    class Serializer {
-      public:
-        virtual ~Serializer() {
-        }
-
-        io::OutputObject* Serialize(uint64 id, const std::string& fun_name,
-                                    const Message& msg) const = 0;
-    };
-    scoped_ptr<Serializer> serializer_;
-
     virtual bool find(uint64 id, ClientCallback** cb);
+    virtual void CallMethod(const ::google::protobuf::MethodDescriptor* method,
+                            ::google::protobuf::RpcController* controller,
+                            const ::google::protobuf::Message* request,
+                            ::google::protobuf::Message* response,
+                            ::google::protobuf::Closure* done);
 
     void checkTimedout(const TimeStamp& time_stamp);
 

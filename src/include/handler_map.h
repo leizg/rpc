@@ -1,5 +1,4 @@
-#ifndef HANDLER_MAP_H_
-#define HANDLER_MAP_H_
+#pragma once
 
 #include "rpc_def.h"
 #include "base/base.h"
@@ -26,7 +25,7 @@ class MethodHandler {
     DISALLOW_COPY_AND_ASSIGN(MethodHandler);
 };
 
-class HandlerMap {
+class HandlerMap {  // no need threadsafe.
   public:
     explicit HandlerMap(Service* serv = nullptr) {
       if (serv != nullptr) {
@@ -62,4 +61,3 @@ class HandlerMap {
     DISALLOW_COPY_AND_ASSIGN(HandlerMap);
 };
 }
-#endif /* HANDLER_MAP_H_ */

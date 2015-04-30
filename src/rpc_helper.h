@@ -9,8 +9,8 @@ namespace rpc {
 class ClientCallback : public ::google::protobuf::Closure {
   public:
     explicit ClientCallback(const TimeStamp& time_stamp)
-        : time_stamp_(time_stamp), fail_(false), method_(NULL), request_(NULL), response_(
-        NULL) {
+        : time_stamp_(time_stamp), fail_(false), id_(0) {
+      method_ = request_ = response_ = nullptr;
     }
     virtual ~ClientCallback() {
     }
@@ -22,9 +22,10 @@ class ClientCallback : public ::google::protobuf::Closure {
       return fail_;
     }
 
-    const MethodDescriptor* getMethod() const {
-      return method_;
+    uint64 id() const {
+      return id_;
     }
+
     Message* getRequest() const {
       return request_;
     }
@@ -32,14 +33,17 @@ class ClientCallback : public ::google::protobuf::Closure {
       return response_;
     }
 
-    void SetContext(const MethodDescriptor* method, const Message* request,
-                    Message* response) {
+    const MethodDescriptor* getMethod() const {
+      return method_;
+    }
+
+    void SetContext(uint64 req_id, const MethodDescriptor* method,
+                    const Message* request, Message* response) {
+      id_ = req_id;
       method_ = method;
       request_ = request;
       response_ = response;
     }
-
-    void SetCancelContext(uint64 req_id);
 
     virtual void Cancel() = 0;
     virtual void Run() {
@@ -49,6 +53,7 @@ class ClientCallback : public ::google::protobuf::Closure {
 
   protected:
     bool fail_;
+    uint64 id_;
     SyncEvent sync_evnet_;
 
     virtual void onDone() = 0;
