@@ -4,9 +4,9 @@
 
 namespace rpc {
 
-class RpcProcessor : public async::ProActorProtocol::Scheduler {
+class RpcScheduler : public async::ProActorProtocol::Scheduler {
   public:
-    virtual ~RpcProcessor() {
+    virtual ~RpcScheduler() {
     }
 
     // used to dispatch messages.
@@ -18,15 +18,16 @@ class RpcProcessor : public async::ProActorProtocol::Scheduler {
         }
 
         // dispatch message.
-        virtual void process(async::Connection* conn,
-                             io::InputStream* in_stream,
-                             const TimeStamp& time_stamp) = 0;
+        virtual void dispatch(async::Connection* conn,
+                              io::InputStream* in_stream,
+                              const TimeStamp& time_stamp) = 0;
     };
-    RpcProcessor(Delegate* request_delegate, Delegate* reply_delegate = nullptr)
+    RpcScheduler(Delegate* request_delegate, Delegate* reply_delegate = nullptr)
         : request_delegate_(request_delegate) {
       DCHECK_NOTNULL(request_delegate);
-      DCHECK_NOTNULL(reply_delegate);
-      reply_delegate_.reset(request_delegate);
+      if (request_delegate != nullptr) {
+        reply_delegate_.reset(request_delegate);
+      }
     }
 
   private:
@@ -36,6 +37,6 @@ class RpcProcessor : public async::ProActorProtocol::Scheduler {
     virtual void dispatch(async::Connection* conn, io::InputStream* in_stream,
                           TimeStamp time_stamp);
 
-    DISALLOW_COPY_AND_ASSIGN(RpcProcessor);
+    DISALLOW_COPY_AND_ASSIGN(RpcScheduler);
 };
 }

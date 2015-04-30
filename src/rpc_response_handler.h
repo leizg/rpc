@@ -1,7 +1,6 @@
-#ifndef RPC_RESPONSE_PROCESSOR_H_
-#define RPC_RESPONSE_PROCESSOR_H_
+#pragma once
 
-#include "rpc_processor.h"
+#include "rpc_scheduler.h"
 
 namespace io {
 class EventManager;
@@ -10,7 +9,7 @@ class OutputObject;
 
 namespace rpc {
 
-class RpcClientChannel : public RpcProcessor::Delegate,
+class RpcClientChannel : public RpcScheduler::Delegate,
     public google::protobuf::RpcChannel {
   public:
     class Sender {
@@ -54,4 +53,3 @@ class RpcClientChannel : public RpcProcessor::Delegate,
     DISALLOW_COPY_AND_ASSIGN (RpcClientChannel);
 };
 }
-#endif /* RPC_RESPONSE_PROCESSOR_H_ */

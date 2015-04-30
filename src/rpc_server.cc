@@ -18,14 +18,16 @@ void RpcServer::setHandlerMap(HandlerMap* handler_map) {
 bool RpcServer::start(int server) {
   DCHECK_NOTNULL(handler_map_.get());
   DCHECK_NOTNULL(protocol_.get());
+
   protocol_.reset(
       new RpcProtocol(
-          new RpcProcessor(new RpcServerProcessor(handler_map_.get()))));
+          new RpcScheduler(new RpcRequestDispatcher(handler_map_.get()))));
 
   serv_.reset(new async::AsyncServer(ev_mgr_, server, worker_));
   serv_->setProtocol(protocol_.get());
   if (!serv_->init()) {
-    fail: protocol_.reset();
+    protocol_.reset();
+    serv_->stop();
     serv_.reset();
     return false;
   }
@@ -34,6 +36,9 @@ bool RpcServer::start(int server) {
 }
 
 void RpcServer::stop() {
-  if (serv_ != nullptr) serv_->stop();
+  if (serv_ != nullptr) {
+    serv_->stop();
+    serv_.reset();
+  }
 }
 }

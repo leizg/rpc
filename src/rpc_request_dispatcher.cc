@@ -1,10 +1,10 @@
 #include "io/io_buf.h"
+#include "io/memory_block.h"
 #include "async/connection.h"
 
 #include "handler_map.h"
-#include "rpc_processor.h"
 #include "zero_copy_stream.h"
-#include "rpc_server_processor.h"
+#include "rpc_request_dispatcher.h"
 
 namespace {
 
@@ -15,18 +15,17 @@ class ReplyObject : public io::OutVectorObject::IoObject {
       DCHECK_NOTNULL(reply);
       buildData(header);
     }
-
     virtual ~ReplyObject() {
     }
 
   private:
     scoped_ptr<Message> msg_;
-
-    std::vector<iovec> iov_;
-    scoped_ptr<io::OutputBuf> data_;
+    scoped_ptr<io::ExternableChunk> chunk_;
 
     void buildData(const MessageHeader& header);
     void buildHeader(const MessageHeader& header, char* data) const;
+
+    std::vector<iovec> iov_;
     virtual const std::vector<iovec>& ioVec() const {
       return iov_;
     }
@@ -45,44 +44,38 @@ void ReplyObject::buildHeader(const MessageHeader& header, char* data) const {
 }
 
 void ReplyObject::buildData(const MessageHeader& header) {
-  iovec io;
-
-  uint32 total_len = msg_->ByteSize() + RPC_HEADER_LENGTH;
-  data_.reset(new io::OutputBuf(total_len));
-  char* data;
-  int size = RPC_HEADER_LENGTH;
-  data_->Next((char**) &data, &size);
-  DCHECK_EQ(size, RPC_HEADER_LENGTH);
-  io.iov_base = data;
-  buildHeader(header, data);
+  uint32 total_len = msg_->ByteSize() + RPC_HEADER_LENGTH + 1;
+  chunk_.reset(new io::ExternableChunk(total_len));
+  buildHeader(header, chunk_->peekW());
+  chunk_->skipWrite(RPC_HEADER_LENGTH);
 
   // TODO: ZeroCopyStream.
-  size = msg_->ByteSize();
-  data_->Next(&data, &size);
-  DCHECK_EQ(size, msg_->ByteSize());
-  msg_->SerializePartialToArray(data, size);
+  chunk_->ensureLeft(msg_->ByteSize());
+  msg_->SerializePartialToArray(chunk_->peekW(), msg_->ByteSize());
 
-  io.iov_len = total_len;
+  iovec io;
+  io.iov_base = chunk_->peekR();
+  io.iov_len = chunk_->writen();
   iov_.push_back(io);
 }
 }
 namespace rpc {
 
-void RpcServerProcessor::process(async::Connection* conn,
-                                 io::InputStream* input_stream,
-                                 const TimeStamp& time_stamp) {
+void RpcRequestDispatcher::dispatch(async::Connection* conn,
+                                   io::InputStream* input_stream,
+                                   const TimeStamp& time_stamp) {
   const MessageHeader* header = GetRpcHeaderFromConnection(conn);
   MethodHandler* method_handler = handler_map_->FindMehodById(header->fun_id);
-  if (method_handler == NULL) {
+  if (method_handler == nullptr) {
     LOG(WARNING)<< "can't find handler, id: " << header->fun_id;
     return;
   }
 
   scoped_ptr<Message> req(method_handler->request->New());
-  scoped_ptr<InputStream> input_stream(new InputStream(input_buf));
-  bool ret = req->ParseFromZeroCopyStream(input_stream.get());
+  scoped_ptr<InputStream> stream(new InputStream(input_stream));
+  bool ret = req->ParseFromZeroCopyStream(stream.get());
   if (!ret) {
-    DLOG(WARNING)<< "parse request error: ";
+    DLOG(WARNING)<< "parse request error: " << req->DebugString();
     return;
   }
 
@@ -93,19 +86,19 @@ void RpcServerProcessor::process(async::Connection* conn,
                                       new ReplyClosure(conn, header, reply));
 }
 
-RpcServerProcessor::ReplyClosure::ReplyClosure(async::Connection* conn,
-                                               const MessageHeader& header,
-                                               Message* reply)
+RpcRequestDispatcher::ReplyClosure::ReplyClosure(async::Connection* conn,
+                                                const MessageHeader& header,
+                                                Message* reply)
     : hdr_(header), reply_(reply), conn_(conn) {
   DCHECK_NOTNULL(conn);
   DCHECK_NOTNULL(reply);
   conn->Ref();
 }
 
-RpcServerProcessor::ReplyClosure::~ReplyClosure() {
+RpcRequestDispatcher::ReplyClosure::~ReplyClosure() {
 }
 
-void RpcServerProcessor::ReplyClosure::Run() {
+void RpcRequestDispatcher::ReplyClosure::Run() {
   io::OutputObject* obj = new io::OutVectorObject(
       new ReplyObject(hdr_, reply_.release()));
   conn_->send(obj);

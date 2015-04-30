@@ -1,24 +1,25 @@
 #pragma once
 
-#include "rpc_processor.h"
+#include "rpc_scheduler.h"
 
 namespace rpc {
 class HandlerMap;
 
-class RpcServerProcessor : public RpcProcessor::Delegate {
+class RpcRequestDispatcher : public RpcScheduler::Delegate {
   public:
-    explicit RpcServerProcessor(HandlerMap* handler_map)
+    explicit RpcRequestDispatcher(HandlerMap* handler_map)
         : handler_map_(handler_map) {
       DCHECK_NOTNULL(handler_map);
     }
-    virtual ~RpcServerProcessor() {
+    virtual ~RpcRequestDispatcher() {
     }
 
   private:
     const HandlerMap* handler_map_;
 
-    virtual void process(async::Connection* conn, io::InputStream* input_stream,
-                         const TimeStamp& time_stamp);
+    virtual void dispatch(async::Connection* conn,
+                          io::InputStream* input_stream,
+                          const TimeStamp& time_stamp);
 
     class ReplyClosure : public ::google::protobuf::Closure {
       public:
@@ -37,6 +38,6 @@ class RpcServerProcessor : public RpcProcessor::Delegate {
         DISALLOW_COPY_AND_ASSIGN(ReplyClosure);
     };
 
-    DISALLOW_COPY_AND_ASSIGN(RpcServerProcessor);
+    DISALLOW_COPY_AND_ASSIGN(RpcRequestDispatcher);
 };
 }

@@ -12,7 +12,7 @@ RpcClient::RpcClient(io::EventManager* ev_mgr, HandlerMap* handler_map,
   DCHECK_NOTNULL(ev_mgr);
   protocol_.reset(
       new RpcProtocol(
-          new RpcProcessor(new RpcRequestHandler(handler_map),
+          new RpcScheduler(new RpcRequestHandler(handler_map),
                            new RpcClientChannel)));
   client_.reset(new io::TcpClient(ev_mgr, ip, port));
   client_->SetProtocol(protocol_.get());
