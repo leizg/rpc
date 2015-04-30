@@ -1,6 +1,6 @@
 #include "rpc_def.h"
 #include "rpc_protocol.h"
-#include "rpc_processor.h"
+#include "rpc_dispatcher.h"
 
 #include "io/io_buf.h"
 

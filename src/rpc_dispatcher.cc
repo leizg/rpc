@@ -4,7 +4,7 @@
 
 #include "handler_map.h"
 #include "zero_copy_stream.h"
-#include "rpc_request_dispatcher.h"
+#include "rpc_dispatcher.h"
 
 namespace {
 
@@ -62,11 +62,12 @@ void ReplyObject::buildData(const MessageHeader& header) {
 namespace rpc {
 
 void RpcRequestDispatcher::dispatch(async::Connection* conn,
-                                   io::InputStream* input_stream,
-                                   const TimeStamp& time_stamp) {
+                                    io::InputStream* input_stream,
+                                    const TimeStamp& time_stamp) {
   const MessageHeader* header = GetRpcHeaderFromConnection(conn);
   MethodHandler* method_handler = handler_map_->FindMehodById(header->fun_id);
   if (method_handler == nullptr) {
+    delete input_stream;
     LOG(WARNING)<< "can't find handler, id: " << header->fun_id;
     return;
   }
@@ -86,9 +87,28 @@ void RpcRequestDispatcher::dispatch(async::Connection* conn,
                                       new ReplyClosure(conn, header, reply));
 }
 
+void RpcResponseDispatcher::dispatch(async::Connection* conn,
+                                     io::InputStream* input_stream,
+                                     const TimeStamp& time_stamp) {
+  const MessageHeader* header = GetRpcHeaderFromConnection(conn);
+  ClientCallback* cb;
+  if (cb_finder_->find(header->id, &cb)) {
+    delete input_stream;
+    LOG(WARNING) << "unknown id: " << header->id;
+    return;
+  }
+
+  scoped_ptr<InputStream> stream(new InputStream(input_stream));
+  if (!cb->getResponse()->ParseFromZeroCopyStream(stream.get())) {
+    LOG(WARNING) << "parse error: " << cb->getMethod()->DebugString();
+    return;
+  }
+  cb->Run();
+}
+
 RpcRequestDispatcher::ReplyClosure::ReplyClosure(async::Connection* conn,
-                                                const MessageHeader& header,
-                                                Message* reply)
+                                                 const MessageHeader& header,
+                                                 Message* reply)
     : hdr_(header), reply_(reply), conn_(conn) {
   DCHECK_NOTNULL(conn);
   DCHECK_NOTNULL(reply);

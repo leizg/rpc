@@ -40,4 +40,31 @@ class RpcRequestDispatcher : public RpcScheduler::Delegate {
 
     DISALLOW_COPY_AND_ASSIGN(RpcRequestDispatcher);
 };
+
+class RpcResponseDispatcher : public RpcScheduler::Delegate {
+  public:
+    virtual ~RpcResponseDispatcher() {
+    }
+
+    class CbFinder {
+      public:
+        virtual ~CbFinder() {
+        }
+
+        virtual bool find(uint64 id, ClientCallback** cb) = 0;
+    };
+    explicit RpcResponseDispatcher(CbFinder* cb_finder)
+        : cb_finder_(cb_finder) {
+      DCHECK_NOTNULL(cb_finder);
+    }
+
+  private:
+    CbFinder* cb_finder_;
+
+    virtual void dispatch(async::Connection* conn,
+                          io::InputStream* input_stream,
+                          const TimeStamp& time_stamp);
+
+    DISALLOW_COPY_AND_ASSIGN(RpcResponseDispatcher);
+};
 }

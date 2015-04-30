@@ -16,7 +16,7 @@ class ClientCallback : public ::google::protobuf::Closure {
     }
 
     void reset() {
-      time_stamp_ = Now();
+      time_stamp_ = TimeStamp::now();
     }
     bool is_failed() const {
       return fail_;
@@ -42,6 +42,10 @@ class ClientCallback : public ::google::protobuf::Closure {
     void SetCancelContext(uint64 req_id);
 
     virtual void Cancel() = 0;
+    virtual void Run() {
+      onDone();
+      sync_evnet_.Signal();
+    }
 
   protected:
     bool fail_;
@@ -56,11 +60,6 @@ class ClientCallback : public ::google::protobuf::Closure {
     const MethodDescriptor* method_;
     const Message* request_;
     Message* response_;
-
-    virtual void Run() {
-      onDone();
-      sync_evnet_.Signal();
-    }
 
     DISALLOW_COPY_AND_ASSIGN(ClientCallback);
 };

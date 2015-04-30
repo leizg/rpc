@@ -44,7 +44,7 @@ class RequestObject : public io::OutVectorObject::IoObject {
     DISALLOW_COPY_AND_ASSIGN(RequestObject);
 };
 
-class MessageSerialier : public rpc::RpcClientChannel::Serializer {
+class MessageSerialier : public rpc::RpcSyncChannel::Serializer {
   public:
     MessageSerialier() {
     }
@@ -63,18 +63,18 @@ class MessageSerialier : public rpc::RpcClientChannel::Serializer {
 
 namespace rpc {
 
-RpcClientChannel::RpcClientChannel(Sender* sender)
+RpcSyncChannel::RpcSyncChannel(Sender* sender)
     : sender_(sender), id_(1) {
   DCHECK_NOTNULL(sender);
 
   serializer_.reset(new MessageSerialier);
 }
 
-RpcClientChannel::~RpcClientChannel() {
+RpcSyncChannel::~RpcSyncChannel() {
   STLMapClear(&call_back_map_);
 }
 
-void RpcClientChannel::process(io::Connection* conn, io::InputBuf* input_buf,
+void RpcSyncChannel::process(io::Connection* conn, io::InputBuf* input_buf,
                                const TimeStamp& time_stamp) {
   ClientCallback* cb = NULL;
   AutoRunner r(cb);
@@ -91,7 +91,7 @@ void RpcClientChannel::process(io::Connection* conn, io::InputBuf* input_buf,
   //  reply->ParseFromArray(input_buf);  // FIXME : 1
 }
 
-void RpcClientChannel::CallMethod(const MethodDescriptor* method,
+void RpcSyncChannel::CallMethod(const MethodDescriptor* method,
                                   RpcController* controller,
                                   const Message* request, Message* response,
                                   google::protobuf::Closure* done) {
