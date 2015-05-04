@@ -22,7 +22,8 @@ class RpcScheduler : public async::ProActorProtocol::Scheduler {
                               io::InputStream* in_stream,
                               const TimeStamp& time_stamp) = 0;
     };
-    RpcScheduler(Delegate* request_delegate, Delegate* reply_delegate = nullptr)
+    explicit RpcScheduler(Delegate* request_delegate, Delegate* reply_delegate =
+                              nullptr)
         : request_delegate_(request_delegate) {
       DCHECK_NOTNULL(request_delegate);
       if (request_delegate != nullptr) {

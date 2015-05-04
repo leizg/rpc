@@ -46,20 +46,20 @@ class RpcResponseDispatcher : public RpcScheduler::Delegate {
     virtual ~RpcResponseDispatcher() {
     }
 
-    class CbFinder {
+    class Context {
       public:
-        virtual ~CbFinder() {
+        virtual ~Context() {
         }
 
-        virtual bool find(uint64 id, ClientCallback** cb) = 0;
+        virtual bool getCallbackById(uint64 id, ClientCallback** cb) = 0;
     };
-    explicit RpcResponseDispatcher(CbFinder* cb_finder)
+    explicit RpcResponseDispatcher(Context* cb_finder)
         : cb_finder_(cb_finder) {
       DCHECK_NOTNULL(cb_finder);
     }
 
   private:
-    CbFinder* cb_finder_;
+    Context* cb_finder_;
 
     virtual void dispatch(async::Connection* conn,
                           io::InputStream* input_stream,

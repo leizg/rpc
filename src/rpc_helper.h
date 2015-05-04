@@ -9,7 +9,7 @@ namespace rpc {
 class ClientCallback : public ::google::protobuf::Closure {
   public:
     explicit ClientCallback(const TimeStamp& time_stamp)
-        : time_stamp_(time_stamp), fail_(false), id_(0) {
+        : time_stamp_(time_stamp), id_(0) {
       method_ = request_ = response_ = nullptr;
     }
     virtual ~ClientCallback() {
@@ -17,9 +17,6 @@ class ClientCallback : public ::google::protobuf::Closure {
 
     void reset() {
       time_stamp_ = TimeStamp::now();
-    }
-    bool is_failed() const {
-      return fail_;
     }
 
     uint64 id() const {
@@ -37,27 +34,33 @@ class ClientCallback : public ::google::protobuf::Closure {
       return method_;
     }
 
-    void SetContext(uint64 req_id, const MethodDescriptor* method,
+    void setContext(uint64 req_id, const MethodDescriptor* method,
                     const Message* request, Message* response) {
       id_ = req_id;
+
       method_ = method;
       request_ = request;
       response_ = response;
     }
 
-    virtual void Cancel() = 0;
+    virtual bool isRetry() = 0;
+    void Cancel() {
+      onCancel();
+    }
     virtual void Run() {
       onDone();
-      sync_evnet_.Signal();
     }
 
   protected:
-    bool fail_;
     uint64 id_;
     SyncEvent sync_evnet_;
 
-    virtual void onDone() = 0;
-    virtual void onCancel() = 0;
+    virtual void onDone() {
+      sync_evnet_.Signal();
+    }
+    virtual void onCancel() {
+      sync_evnet_.Signal();
+    }
 
   private:
     TimeStamp time_stamp_;
@@ -80,11 +83,11 @@ class SyncCallback : public ClientCallback {
 
   private:
     virtual void onDone() {
-      fail_ = false;
     }
-
     virtual void onCancel() {
-      fail_ = true;
+    }
+    virtual bool isRetry() {
+      return true;
     }
 
     DISALLOW_COPY_AND_ASSIGN(SyncCallback);
@@ -93,17 +96,30 @@ class SyncCallback : public ClientCallback {
 class CancelCallback : public ClientCallback, public RefCounted {
   public:
     CancelCallback(const TimeStamp& time_stamp)
-        : ClientCallback(time_stamp) {
+        : ClientCallback(time_stamp), fail_(false) {
     }
-
-    // return false iif timedout.
-    bool TimedWait();
-
-  private:
     virtual ~CancelCallback();
 
-    virtual void onDone();
-    virtual void onCancel();
+    // return false iif timedout.
+    bool timedWait();
+
+    bool is_failed() const {
+      return fail_;
+    }
+
+  private:
+    bool fail_;
+
+    virtual void onDone() {
+      UnRef();
+    }
+    virtual void onCancel() {
+      fail_ = true;
+      UnRef();
+    }
+    virtual bool isRetry() {
+      return false;
+    }
 
     DISALLOW_COPY_AND_ASSIGN(CancelCallback);
 };

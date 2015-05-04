@@ -99,8 +99,8 @@ void RpcResponseDispatcher::dispatch(async::Connection* conn,
   }
 
   scoped_ptr<InputStream> stream(new InputStream(input_stream));
-  bool ret = cb->getResponse()->ParseFromZeroCopyStream(stream.get());
-  if (!ret) {
+  Message* reply = cb->getResponse();
+  if (!reply->ParseFromZeroCopyStream(stream.get())) {
     LOG(WARNING)<< "parse error: " << cb->getMethod()->DebugString();
     return;
   }

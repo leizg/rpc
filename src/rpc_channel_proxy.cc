@@ -8,26 +8,7 @@ namespace {
 class RequestObject : public io::OutVectorObject::IoObject {
   public:
     RequestObject(uint64 id, const std::string& fun_name, const Message& msg) {
-      buf_.reset(new io::OutputBuf(RPC_HEADER_LENGTH + msg.ByteSize()));
-      MessageHeader* hdr;
-      int len = RPC_HEADER_LENGTH;
-      buf_->Next((char**) &hdr, &len);
-
-      hdr->id = id;
-      hdr->fun_id = Hash(fun_name);
-      hdr->flags = 0;
-      SET_LAST_TAG(*hdr);
-      hdr->length = msg.ByteSize();
-
-      char* data;
-      len = msg.ByteSize();
-      buf_->Next(&data, &len);
-      msg.SerializePartialToArray(data, msg.ByteSize());
-
-      iovec io;
-      io.iov_base = hdr;
-      io.iov_len = RPC_HEADER_LENGTH + msg.ByteSize();
-      ios_.push_back(io);
+      buildData(id, fun_name, msg);
     }
     virtual ~RequestObject() {
     }
@@ -37,28 +18,71 @@ class RequestObject : public io::OutVectorObject::IoObject {
       return ios_;
     }
 
+    void buildData(uint64 id, const std::string& fun_name, const Message& msg);
+
     std::vector<iovec> ios_;
-    scoped_ptr<io::OutputBuf> buf_;
+    scoped_ptr<io::ExternableChunk> chunk_;
 
     DISALLOW_COPY_AND_ASSIGN(RequestObject);
 };
+
+void RequestObject::buildData(uint64 id, const std::string& fun_name,
+                              const Message& msg) {
+  chunk_.reset(new io::ExternableChunk(RPC_HEADER_LENGTH + msg.ByteSize()));
+  chunk_->ensureLeft(RPC_HEADER_LENGTH + msg.ByteSize());
+
+  MessageHeader* hdr = reinterpret_cast<MessageHeader*>(chunk_->peekW());
+  chunk_->skipWrite(RPC_HEADER_LENGTH);
+  hdr->id = id;
+  hdr->fun_id = Hash(fun_name);
+  hdr->flags = 0;
+  SET_LAST_TAG(*hdr);
+  hdr->length = msg.ByteSize();
+
+  msg.SerializePartialToArray(chunk_->peekW(), msg.ByteSize());
+  chunk_->skipWrite(msg.ByteSize());
+
+  iovec io;
+  io.iov_base = hdr;
+  io.iov_len = RPC_HEADER_LENGTH + msg.ByteSize();
+  ios_.push_back(io);
+}
 
 io::OutputObject* Serialize(uint64 id, const std::string& func_name,
                             const Message& msg) const {
   return new io::OutVectorObject(new RequestObject(id, func_name, msg));
 }
-
 }
 
 namespace rpc {
 
-RpcChannelProxy::RpcChannelProxy(Sender* sender)
-    : sender_(sender), id_(1) {
-  DCHECK_NOTNULL(sender);
+RpcChannelProxy::RpcContext::~RpcContext() {
+  CallbackList cbs;
+  {
+    ScopedMutex l(&mutex);
+    cbs.swap(cb_list);
+    cb_map.clear();
+    cb_list.clear();
+  }
+
+  for (auto cb : cbs) {
+    cb->Cancel();
+  }
 }
 
-RpcChannelProxy::~RpcChannelProxy() {
-  STLMapClear(&call_back_map_);
+bool RpcChannelProxy::getCallbackById(uint64 id, ClientCallback** cb) {
+  ScopedMutex l(&ctx_.mutex);
+  auto im = ctx_.cb_map.find(id);
+  if (im == ctx_.cb_map.end()) return false;
+
+  *cb = im->second;
+  ctx_.cb_map.erase(im);
+  auto il = std::find(ctx_.cb_list.begin(), ctx_.cb_list.end(), *cb);
+  if (il != ctx_.cb_list.end()) {
+    ctx_.cb_list.erase(il);
+  }
+
+  return true;
 }
 
 void RpcChannelProxy::CallMethod(
@@ -70,14 +94,19 @@ void RpcChannelProxy::CallMethod(
 
   uint64 id;
   {
-    ScopedMutex l(&mutex_);
-    id = id_;
-    call_back_map_[id_++] = cb;
+    ScopedMutex l(&ctx_.mutex);
+    id = ctx_.id++;
+    ctx_.cb_map[id] = cb;
+    ctx_.cb_list.push_front(cb);
+    cb->SetContext(id, method, request, response);
   }
 
-  cb->SetContext(id, method, request, response);
-  io::OutputObject* out_obj = Serialize(id_, method->full_name(), *request);
+  io::OutputObject* out_obj = Serialize(id, method->full_name(), *request);
   sender_->send(out_obj);
+}
+
+void RpcChannelProxy::checkTimedout(const TimeStamp& time_stamp) {
+
 }
 
 }

@@ -36,7 +36,8 @@ class RpcClient : public ::google::protobuf::RpcChannel,
 
   protected:
     // ev_mgr should have been initialized successfully.
-    RpcClient(async::EventManager* ev_mgr, HandlerMap* handler_map);
+    explicit RpcClient(async::EventManager* ev_mgr, HandlerMap* handler_map =
+                           nullptr);
 
     virtual bool reconnectInternal(uint32 timeout) = 0;
 

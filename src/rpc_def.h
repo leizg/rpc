@@ -1,5 +1,4 @@
-#ifndef RPC_DEF_H_
-#define RPC_DEF_H_
+#pragma once
 
 #include <google/protobuf/service.h>
 #include <google/protobuf/message.h>
@@ -36,4 +35,3 @@ struct MessageHeader {
 
 //static_assert(RPC_HEADER_LENGTH == 16);
 
-#endif /* RPC_DEF_H_ */
