@@ -1,5 +1,4 @@
-#ifndef ZERO_COPY_STREAM_H_
-#define ZERO_COPY_STREAM_H_
+#pragma once
 
 #include "io/input_buf.h"
 #include "io/output_buf.h"
@@ -34,7 +33,7 @@ class InputStream : public ::google::protobuf::io::ZeroCopyInputStream {
   private:
     scoped_ptr<io::InputBuf> buf_;
 
-    DISALLOW_COPY_AND_ASSIGN(InputStream);
+    DISALLOW_COPY_AND_ASSIGN (InputStream);
 };
 
 class OutputStream : public ::google::protobuf::io::ZeroCopyOutputStream {
@@ -58,8 +57,7 @@ class OutputStream : public ::google::protobuf::io::ZeroCopyOutputStream {
   private:
     scoped_ptr<io::OutputBuf> buf_;
 
-    DISALLOW_COPY_AND_ASSIGN(OutputStream);
+    DISALLOW_COPY_AND_ASSIGN (OutputStream);
 };
 
 }
-#endif /* ZERO_COPY_STREAM_H_ */

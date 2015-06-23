@@ -10,7 +10,7 @@ namespace rpc {
 
 void RpcResponseScheduler::dispatch(async::Connection* conn,
                                     io::InputStream* input_stream,
-                                    const TimeStamp& time_stamp) {
+                                    TimeStamp time_stamp) {
   const MessageHeader* header = GetRpcHeaderFromConnection(conn);
   // todo: check rpc is resonse message.
   ClientCallback* cb;

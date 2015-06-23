@@ -1,23 +1,14 @@
 #include "rpc_client.h"
-
 #include "async_client.h"
 #include "event/event_manager.h"
 
 namespace rpc {
 
-RpcClient::RpcClient(async::EventManager* ev_mgr, HandlerMap* handler_map)
+RpcClient::RpcClient(async::EventManager* ev_mgr)
     : ev_mgr_(ev_mgr) {
   DCHECK_NOTNULL(ev_mgr);
-  impl_.reset(new RpcChannelProxy(this));
-  RpcRequestScheduler* req_dispatcher = nullptr;
-  if (handler_map != nullptr) {
-    handler_map_.reset(handler_map);
-    req_dispatcher = new RpcRequestScheduler(handler_map);
-  }
-  protocol_.reset(
-      new RpcProtocol(
-          new RpcScheduler(req_dispatcher,
-                           new RpcResponseScheduler(impl_.get()))));
+  proxy_.reset(new RpcChannelProxy(this, ev_mgr));
+  protocol_.reset(new RpcProtocol(new RpcResponseScheduler(proxy_.get())));
 }
 
 RpcClient::~RpcClient() {
@@ -39,14 +30,6 @@ bool RpcClient::connect(uint32 time_out) {
   client_->setReconnectClosure(reconnect_closure_.get());
 
   return true;
-}
-
-void RpcClient::CallMethod(const ::google::protobuf::MethodDescriptor* method,
-                           ::google::protobuf::RpcController* controller,
-                           const ::google::protobuf::Message* request,
-                           ::google::protobuf::Message* response,
-                           ::google::protobuf::Closure* done) {
-  impl_->CallMethod(method, controller, request, response, done);
 }
 
 void RpcClient::send(io::OutputObject* object) {

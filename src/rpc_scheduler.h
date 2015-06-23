@@ -61,8 +61,7 @@ class RpcResponseScheduler : public async::ProActorProtocol::Scheduler {
     CbContext* cb_ctx_;
 
     virtual void dispatch(async::Connection* conn,
-                          io::InputStream* input_stream,
-                          const TimeStamp& time_stamp);
+                          io::InputStream* input_stream, TimeStamp time_stamp);
 
     DISALLOW_COPY_AND_ASSIGN(RpcResponseScheduler);
 };

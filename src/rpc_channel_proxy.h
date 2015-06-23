@@ -1,19 +1,28 @@
 #pragma once
 
-#include "rpc_dispatcher.h"
+#include "rpc_scheduler.h"
+#include "async/event/timer.h"
 
+namespace io {
+class OutputObject;
+}
 namespace async {
 class EventManager;
-class OutputObject;
 }
 
 namespace rpc {
 
-// todo: handle timeout and retry...
 class RpcChannelProxy : public ::google::protobuf::RpcChannel,
     public RpcResponseScheduler::CbContext {
 
   public:
+    virtual ~RpcChannelProxy() {
+      if (timer_ != nullptr) {
+        timer_->stop();
+        timer_.reset();
+      }
+    }
+
     class Sender {
       public:
         virtual ~Sender() {
@@ -21,20 +30,25 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
 
         virtual void send(io::OutputObject* object) = 0;
     };
-    explicit RpcChannelProxy(Sender* sender)
-        : sender_(sender) {
+    RpcChannelProxy(Sender* sender, async::EventManager* ev_mgr)
+        : sender_(sender), ev_mgr_(ev_mgr) {
       DCHECK_NOTNULL(sender);
+      DCHECK_NOTNULL(ev_mgr);
+      init();
     }
-    virtual ~RpcChannelProxy();
 
   private:
     Sender* sender_;
+    async::EventManager* ev_mgr_;
 
     struct RpcContext {
         RpcContext()
             : id(1) {
         }
         ~RpcContext();
+
+        uint64 push(ClientCallback* cb);
+        ClientCallback* get(uint64 id);
 
         uint64 id;
         Mutex mutex;
@@ -55,8 +69,9 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
                             ::google::protobuf::Message* response,
                             ::google::protobuf::Closure* done);
 
-    // todo: add timer.
+    void init();
     void checkTimedout(const TimeStamp& time_stamp);
+    scoped_ptr<async::RepeatTimer> timer_;
 
     DISALLOW_COPY_AND_ASSIGN (RpcChannelProxy);
 };

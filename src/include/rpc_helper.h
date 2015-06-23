@@ -1,5 +1,4 @@
-#ifndef RPC_HELPER_H_
-#define RPC_HELPER_H_
+#pragma once
 
 #include "rpc_def.h"
 #include "base/base.h"
@@ -8,28 +7,37 @@ namespace rpc {
 
 class ClientCallback : public ::google::protobuf::Closure {
   public:
-    explicit ClientCallback(const TimeStamp& time_stamp)
-        : time_stamp_(time_stamp), id_(0) {
+    ClientCallback(bool is_retry)
+        : id_(0), fail_(false), is_retry_(is_retry) {
+      time_stamp_ = TimeStamp::now();
       method_ = request_ = response_ = nullptr;
     }
     virtual ~ClientCallback() {
     }
 
-    void reset() {
-      time_stamp_ = TimeStamp::now();
+    bool isRetry() const {
+      return is_retry_;
     }
-
     uint64 id() const {
       return id_;
     }
 
-    Message* getRequest() const {
-      return request_;
+    void reset() {
+      time_stamp_ = TimeStamp::now();
+    }
+    const TimeStamp& timestamp() const {
+      return time_stamp_;
+    }
+    bool isTimedout(const TimeStamp& now) const {
+      return now - time_stamp_ > 1000 * TimeStamp::kMilliSecsPerSecond;
+    }
+
+    const Message& getRequest() const {
+      return *request_;
     }
     Message* getResponse() const {
       return response_;
     }
-
     const MethodDescriptor* getMethod() const {
       return method_;
     }
@@ -37,13 +45,18 @@ class ClientCallback : public ::google::protobuf::Closure {
     void setContext(uint64 req_id, const MethodDescriptor* method,
                     const Message* request, Message* response) {
       id_ = req_id;
-
       method_ = method;
       request_ = request;
       response_ = response;
     }
 
-    virtual bool isRetry() = 0;
+    bool is_failed() const {
+      return fail_;
+    }
+
+    void wait() {
+      sync_evnet_.Wait();
+    }
     void Cancel() {
       onCancel();
     }
@@ -53,18 +66,20 @@ class ClientCallback : public ::google::protobuf::Closure {
 
   protected:
     uint64 id_;
+    bool fail_;
+    bool is_retry_;
     SyncEvent sync_evnet_;
 
     virtual void onDone() {
       sync_evnet_.Signal();
     }
     virtual void onCancel() {
+      fail_ = true;
       sync_evnet_.Signal();
     }
 
   private:
     TimeStamp time_stamp_;
-
     const MethodDescriptor* method_;
     const Message* request_;
     Message* response_;
@@ -74,51 +89,39 @@ class ClientCallback : public ::google::protobuf::Closure {
 
 class SyncCallback : public ClientCallback {
   public:
-    SyncCallback(const TimeStamp& time_stamp)
-        : ClientCallback(time_stamp) {
+    SyncCallback()
+        : ClientCallback(true) {
     }
-    virtual ~SyncCallback();
-
-    void Wait();
+    virtual ~SyncCallback() {
+    }
 
   private:
-    virtual void onDone() {
-    }
-    virtual void onCancel() {
-    }
-    virtual bool isRetry() {
-      return true;
-    }
-
     DISALLOW_COPY_AND_ASSIGN(SyncCallback);
 };
 
 class CancelCallback : public ClientCallback, public RefCounted {
   public:
-    CancelCallback(const TimeStamp& time_stamp)
-        : ClientCallback(time_stamp), fail_(false) {
+    CancelCallback()
+        : ClientCallback(false) {
     }
-    virtual ~CancelCallback();
+    virtual ~CancelCallback() {
+      delete request_;
+      delete response_;
+    }
 
     // return false iif timedout.
-    bool timedWait();
-
-    bool is_failed() const {
-      return fail_;
+    bool timedWait(uint32 timedout) {
+      return sync_evnet_.TimeWait(timedout);
     }
 
   private:
-    bool fail_;
-
     virtual void onDone() {
+      ClientCallback::onDone();
       UnRef();
     }
     virtual void onCancel() {
-      fail_ = true;
+      ClientCallback::onCancel();
       UnRef();
-    }
-    virtual bool isRetry() {
-      return false;
     }
 
     DISALLOW_COPY_AND_ASSIGN(CancelCallback);
@@ -126,4 +129,3 @@ class CancelCallback : public ClientCallback, public RefCounted {
 
 }
 
-#endif /* RPC_HELPER_H_ */
