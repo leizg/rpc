@@ -1,0 +1,41 @@
+import os, sys, time
+from glob import glob
+
+env = Environment()
+ccflags = ['-std=c++11', ]
+if ARGUMENTS.get('release', '0') == '0':
+  ccflags += ['-O0', '-g3', '-Werror', ]
+else:
+  ccflags += ['-O3', '-g0', '-Wall', ]
+env.Append(CPPFLAGS = ccflags)
+env.Append(CPPPATH = ['../', '/usr/local/include'])
+
+ccdefines = {'_FILE_OFFSET_BITS' : '64', 
+'DEBUG' : 1, }
+if sys.platform == 'darwin':
+  ccdefines['__APPALE__'] = 1 
+env.Append(CPPDEFINES=ccdefines)
+
+env.Append(LIBPATH = ['/usr/local/lib',])
+libs = ['pthread', 'dl', 'glog', 'protobuf', 'gflags', 'gtest', 'tcmalloc', 'snappy']
+if sys.platform != 'darwin':
+  libs += ['rt']
+env.Append(LIBS=libs)
+
+source_files = glob('../base/*.cc') + \
+               glob('../io/*.cc') + \
+               glob('../net/*.cc') + \
+               glob('../util/*.cc') + \
+               glob('../util/logger/*.cc') + \
+               glob('../util/compression/*.cc') + \
+               glob('../../unittest/*.cc')
+
+if sys.platform != 'darwin':
+  source_files += glob('../util/file_system_watcher/*.cc') 
+
+print("souce code list: >>")
+for s in source_files:
+	print(os.path.realpath(s))
+print('')
+
+env.Program('test', source_files)

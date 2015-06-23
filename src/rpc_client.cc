@@ -9,15 +9,15 @@ RpcClient::RpcClient(async::EventManager* ev_mgr, HandlerMap* handler_map)
     : ev_mgr_(ev_mgr) {
   DCHECK_NOTNULL(ev_mgr);
   impl_.reset(new RpcChannelProxy(this));
-  RpcRequestDispatcher* req_dispatcher = nullptr;
+  RpcRequestScheduler* req_dispatcher = nullptr;
   if (handler_map != nullptr) {
     handler_map_.reset(handler_map);
-    req_dispatcher = new RpcRequestDispatcher(handler_map);
+    req_dispatcher = new RpcRequestScheduler(handler_map);
   }
   protocol_.reset(
       new RpcProtocol(
           new RpcScheduler(req_dispatcher,
-                           new RpcResponseDispatcher(impl_.get()))));
+                           new RpcResponseScheduler(impl_.get()))));
 }
 
 RpcClient::~RpcClient() {

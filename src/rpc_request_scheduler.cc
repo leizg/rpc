@@ -3,8 +3,8 @@
 #include "async/connection.h"
 
 #include "handler_map.h"
+#include "rpc_scheduler.h"
 #include "zero_copy_stream.h"
-#include "rpc_dispatcher.h"
 
 namespace {
 
@@ -61,11 +61,11 @@ void ReplyObject::buildData(const MessageHeader& header) {
 }
 namespace rpc {
 
-void RpcRequestDispatcher::dispatch(async::Connection* conn,
-                                    io::InputStream* input_stream,
-                                    const TimeStamp& time_stamp) {
+void RpcRequestScheduler::dispatch(async::Connection* conn,
+                                   io::InputStream* input_stream,
+                                   TimeStamp time_stamp) {
   const MessageHeader* header = GetRpcHeaderFromConnection(conn);
-  MethodHandler* method_handler = handler_map_->FindMehodById(header->fun_id);
+  MethodHandler* method_handler = handler_map_->findMehodById(header->fun_id);
   if (method_handler == nullptr) {
     delete input_stream;
     LOG(WARNING)<< "can't find handler, id: " << header->fun_id;
@@ -87,39 +87,20 @@ void RpcRequestDispatcher::dispatch(async::Connection* conn,
                                       new ReplyClosure(conn, header, reply));
 }
 
-void RpcResponseDispatcher::dispatch(async::Connection* conn,
-                                     io::InputStream* input_stream,
-                                     const TimeStamp& time_stamp) {
-  const MessageHeader* header = GetRpcHeaderFromConnection(conn);
-  ClientCallback* cb;
-  if (!cb_finder_->find(header->id, &cb)) {
-    delete input_stream;
-    LOG(WARNING)<< "unknown id: " << header->id;
-    return;
-  }
-
-  scoped_ptr<InputStream> stream(new InputStream(input_stream));
-  Message* reply = cb->getResponse();
-  if (!reply->ParseFromZeroCopyStream(stream.get())) {
-    LOG(WARNING)<< "parse error: " << cb->getMethod()->DebugString();
-    return;
-  }
-  cb->Run();
-}
-
-RpcRequestDispatcher::ReplyClosure::ReplyClosure(async::Connection* conn,
-                                                 const MessageHeader& header,
-                                                 Message* reply)
-    : hdr_(header), reply_(reply), conn_(conn) {
-  DCHECK_NOTNULL(conn);
+RpcRequestScheduler::ReplyClosure::ReplyClosure(async::Connection* conn,
+                                                const MessageHeader& header,
+                                                Message* reply)
+    : hdr_(header), reply_(reply) {
   DCHECK_NOTNULL(reply);
+  DCHECK_NOTNULL(conn);
   conn->Ref();
+  conn_(conn);
 }
 
-RpcRequestDispatcher::ReplyClosure::~ReplyClosure() {
+RpcRequestScheduler::ReplyClosure::~ReplyClosure() {
 }
 
-void RpcRequestDispatcher::ReplyClosure::Run() {
+void RpcRequestScheduler::ReplyClosure::Run() {
   io::OutputObject* obj = new io::OutVectorObject(
       new ReplyObject(hdr_, reply_.release()));
   conn_->send(obj);

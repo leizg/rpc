@@ -15,7 +15,7 @@ void parseRpcHeader(const char* data, uint32 len, MessageHeader* hdr) {
 namespace rpc {
 
 bool RpcProtocol::RpcParser::parseHeader(async::Connection* conn) const {
-  RpcData* attr = reinterpret_cast<RpcData*>(conn->getData());
+  RpcData* attr = GetRpcHeaderFromConnection(conn);
   DCHECK_EQ(attr->pending_size, 0);
 
   MessageHeader* hdr = attr->header();

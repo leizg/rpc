@@ -1,0 +1,1 @@
+SConscript('SConscript', variant_dir='../src/build', duplicate=0)

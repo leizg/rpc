@@ -56,7 +56,7 @@ class RpcProtocol : public async::ProActorProtocol {
 
 inline MessageHeader* GetRpcHeaderFromConnection(async::Connection* conn) {
   RpcProtocol::RpcData* attr =
-      static_cast<RpcProtocol::RpcData*>(conn->getData());
+      reinterpret_cast<RpcProtocol::RpcData*>(conn->getData());
   return attr->header();
 }
 }

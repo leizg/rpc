@@ -3,21 +3,29 @@
 
 namespace rpc {
 
-bool HandlerMap::AddService(Service* serv) {
+bool HandlerMap::registeHandler(uint32 hash_id, MethodHandler* handler) {
+  MethodHandler* old = findMehodById(hash_id);
+  if (old != nullptr) {
+    LOG(WARNING)<< "exist handler, name: " << handler->method->DebugString();
+    return false;
+  }
+
+  return serv_map_.insert(std::make_pair(hash_id, handler)).second;
+}
+
+bool HandlerMap::addService(Service* serv) {
   const ServiceDescriptor* const serv_desc = serv->GetDescriptor();
   int method_count = serv_desc->method_count();
   for (int i = 0; i < method_count; ++i) {
-    const MethodDescriptor* const method_desc = serv_desc->method(i);
+    auto method_desc = serv_desc->method(i);
 
-    MethodHandler* handler = new MethodHandler;
-    handler->service = serv;
-    handler->method = method_desc;
-    handler->request = serv->GetRequestPrototype(method_desc).New();
-    handler->reply = serv->GetResponsePrototype(method_desc).New();
+    MethodHandler* handler = new MethodHandler(serv, method_desc);
+    handler->request.reset(serv->GetRequestPrototype(method_desc).New());
+    handler->reply.reset(serv->GetResponsePrototype(method_desc).New());
 
     auto& method_name = method_desc->full_name();
-    uint32 hash_id = Hash(method_name);
-    if (!AddHandler(hash_id, handler)) {
+    uint32 hash_id = SuperFastHash(method_name);
+    if (!registeHandler(hash_id, handler)) {
       LOG(WARNING)<<"duplicate handler, name: " << method_name;
       delete handler;
       return false;

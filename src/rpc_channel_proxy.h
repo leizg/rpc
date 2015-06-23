@@ -11,7 +11,7 @@ namespace rpc {
 
 // todo: handle timeout and retry...
 class RpcChannelProxy : public ::google::protobuf::RpcChannel,
-    public RpcResponseDispatcher::Context {
+    public RpcResponseScheduler::CbContext {
 
   public:
     class Sender {

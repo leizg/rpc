@@ -17,10 +17,7 @@ void RpcServer::setHandlerMap(HandlerMap* handler_map) {
 
 bool RpcServer::start(int server) {
   DCHECK_NOTNULL(handler_map_.get());
-  protocol_.reset(
-      new RpcProtocol(
-          new RpcScheduler(new RpcRequestDispatcher(handler_map_.get()))));
-
+  protocol_.reset(new RpcProtocol(new RpcRequestScheduler(handler_map_.get())));
   serv_.reset(new async::AsyncServer(ev_mgr_, server, worker_));
   serv_->setProtocol(protocol_.get());
   if (!serv_->init()) {

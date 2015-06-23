@@ -7,56 +7,51 @@ namespace rpc {
 
 class MethodHandler {
   public:
-    MethodHandler()
-        : service(nullptr), method(nullptr), request(nullptr), reply(nullptr) {
+    MethodHandler(Service* s, const MethodDescriptor* m)
+        : service(s), method(m) {
     }
     ~MethodHandler() {
-      delete request;
-      delete reply;
     }
 
-    Service* service;  // shouldn't delete service.
-    const MethodDescriptor* method;  // shouldn't delete method.
+    // shouldn't delete service and method.
+    Service* service;
+    const MethodDescriptor* method;
 
-    const Message* request;
-    const Message* reply;
+    scoped_ptr<Message> request;
+    scoped_ptr<Message> reply;
 
   private:
     DISALLOW_COPY_AND_ASSIGN(MethodHandler);
 };
 
-class HandlerMap {  // no need threadsafe.
+// no need threadsafe.
+// must add service as soon as possible.
+class HandlerMap {
   public:
     explicit HandlerMap(Service* serv = nullptr) {
       if (serv != nullptr) {
-        AddService(serv);
+        addService(serv);
       }
     }
     ~HandlerMap() {
       STLMapClear(&serv_map_);
     }
 
-    bool AddService(Service* serv);
+    bool addService(Service* serv);
 
-    MethodHandler* FindMehodById(uint32 id) const {
+    MethodHandler* findMehodById(uint32 id) const {
       auto it = serv_map_.find(id);
       if (it != serv_map_.end()) {
         return it->second;
       }
-      return NULL;
+      return nullptr;
     }
 
   private:
     typedef std::map<uint32, MethodHandler*> ServMap;
-
-    bool AddHandler(uint32 hash_id, MethodHandler* handler) {
-      MethodHandler* old = FindMehodById(hash_id);
-      if (old != NULL) return false;
-
-      return serv_map_.insert(std::make_pair(hash_id, handler)).second;
-    }
-
     ServMap serv_map_;
+
+    bool registeHandler(uint32 hash_id, MethodHandler* handler);
 
     DISALLOW_COPY_AND_ASSIGN(HandlerMap);
 };
