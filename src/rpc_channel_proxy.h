@@ -59,7 +59,6 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
         typedef std::list<ClientCallback*> CallbackList;
         CallbackList cb_list;
     };
-
     RpcContext ctx_;
 
     virtual bool getCallbackById(uint64 id, ClientCallback** cb);
@@ -69,7 +68,11 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
                             ::google::protobuf::Message* response,
                             ::google::protobuf::Closure* done);
 
+    void sendCallback(ClientCallback* cb);
+
     void init();
+    void firedTimedoutCbs(const TimeStamp& now,
+                          std::vector<ClientCallback*>* cbs);
     void checkTimedout(const TimeStamp& time_stamp);
     scoped_ptr<async::RepeatTimer> timer_;
 

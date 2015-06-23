@@ -1,7 +1,7 @@
 #pragma once
 
-#include "io/input_buf.h"
-#include "io/output_buf.h"
+#include "io/input_stream.h"
+#include "io/output_stream.h"
 
 #include <google/protobuf/io/zero_copy_stream.h>
 

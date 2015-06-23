@@ -6,6 +6,8 @@ namespace rpc {
 
 RpcClient::RpcClient(async::EventManager* ev_mgr)
     : ev_mgr_(ev_mgr) {
+  reconnect_closure_ = nullptr;
+
   DCHECK_NOTNULL(ev_mgr);
   proxy_.reset(new RpcChannelProxy(this, ev_mgr));
   protocol_.reset(new RpcProtocol(new RpcResponseScheduler(proxy_.get())));
@@ -15,6 +17,7 @@ RpcClient::~RpcClient() {
   ScopedMutex m(&mutex_);
   if (client_ != nullptr) {
     client_->stop();
+    client_.reset();
   }
 }
 
@@ -26,10 +29,21 @@ bool RpcClient::connect(uint32 time_out) {
   }
 
   client_->setProtocol(protocol_.get());
-  client_->setCloseClosure(close_closure_.get());
-  client_->setReconnectClosure(reconnect_closure_.get());
+  client_->setCloseClosure(::NewCallback(this, &RpcClient::onAbort));
+  client_->setReconnectClosure(reconnect_closure_);
 
   return true;
+}
+
+void RpcClient::onAbort() {
+  {
+    ScopedMutex m(&mutex_);
+    client_.reset();
+  }
+
+  if (close_closure_ != nullptr) {
+    close_closure_->Run();
+  }
 }
 
 void RpcClient::send(io::OutputObject* object) {

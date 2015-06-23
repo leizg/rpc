@@ -24,7 +24,7 @@ class RpcClient : public ::google::protobuf::RpcChannel,
     // not threadsafe.
     // called after reconnect successfully.
     void setReconnectClosure(Closure* cb) {
-      reconnect_closure_.reset(cb);
+      reconnect_closure_ = cb;
     }
 
     // return false iif timedout or error orrcurred.
@@ -60,9 +60,10 @@ class RpcClient : public ::google::protobuf::RpcChannel,
       proxy_->CallMethod(method, controller, request, response, done);
     }
 
+    void onAbort();
     void reconnect();
+    Closure* reconnect_closure_;
     scoped_ptr<Closure> close_closure_;
-    scoped_ptr<Closure> reconnect_closure_;
 
     DISALLOW_COPY_AND_ASSIGN (RpcClient);
 };

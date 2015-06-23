@@ -105,10 +105,7 @@ void RpcChannelProxy::CallMethod(
   ClientCallback* cb = reinterpret_cast<ClientCallback*>(done);
   uint64 id = ctx_.push(cb);
   cb->setContext(id, method, request, response);
-
-  auto req_obj = new RequestObject;
-  req_obj->serialize(id, method->full_name(), *request);
-  sender_->send(new io::OutVectorObject(req_obj));
+  sendCallback(cb);
 }
 
 void RpcChannelProxy::init() {
@@ -119,38 +116,44 @@ void RpcChannelProxy::init() {
   timer_->start();
 }
 
+void RpcChannelProxy::sendCallback(ClientCallback* cb) {
+  auto req_obj = new RequestObject;
+  req_obj->serialize(cb->id(), cb->getMethod()->full_name(), cb->getRequest());
+  sender_->send(new io::OutVectorObject(req_obj));
+}
+
+void RpcChannelProxy::firedTimedoutCbs(const TimeStamp& now,
+                                       std::vector<ClientCallback*>* cbs) {
+  auto& cb_list = ctx_.cb_list;
+  ScopedMutex l(&ctx_.mutex);
+  while (true) {
+    auto it = cb_list.begin();
+    auto& cb = *it;
+    if (!cb->isTimedout(now)) {
+      break;
+    }
+
+    cb_list.erase(it);
+    cbs->push_back(cb);
+  }
+}
+
 void RpcChannelProxy::checkTimedout(const TimeStamp& time_stamp) {
   auto& cb_list = ctx_.cb_list;
   auto& cb_map = ctx_.cb_map;
 
-  RpcContext::CallbackList cancel_cbs;
-  {
-    ScopedMutex l(&ctx_.mutex);
-    while (true) {
-      auto it = cb_list.begin();
-      auto& cb = *it;
-      if (!cb->isTimedout(time_stamp)) {
-        break;
-      }
-      cb_list.erase(it);
-      if (!cb->isRetry()) {
-        cb_map.erase(cb->id());
-        cancel_cbs.push_back(cb);
-        continue;
-      }
-
-      cb->reset();
-      cb_list.push_back(cb);
-
-      auto req_obj = new RequestObject;
-      req_obj->serialize(cb->id(), cb->getMethod()->full_name(),
-                         cb->getRequest());
-      sender_->send(new io::OutVectorObject(req_obj));
+  std::vector<ClientCallback*> cbs;
+  firedTimedoutCbs(time_stamp, &cbs);
+  for (auto& cb : cbs) {
+    if (!cb->isRetry()) {
+      cb_map.erase(cb->id());
+      cb->Cancel();
+      continue;
     }
-  }
 
-  for (auto cb : cancel_cbs) {
-    cb->Cancel();
+    cb->reset();
+    cb_list.push_back(cb);
+    sendCallback(cb);
   }
 }
 
