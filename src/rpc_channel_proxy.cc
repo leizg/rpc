@@ -68,6 +68,11 @@ RpcChannelProxy::RpcContext::~RpcContext() {
 
 uint64 RpcChannelProxy::RpcContext::push(ClientCallback* cb) {
   ScopedMutex l(&mutex);
+  if (!cb->isRetry()) {
+    auto cc = reinterpret_cast<CancelCallback*>(cb);
+    cc->Ref();
+  }
+
   cb_map[id] = cb;
   cb_list.push_front(cb);
   return id++;
@@ -125,7 +130,6 @@ void RpcChannelProxy::sendCallback(ClientCallback* cb) {
 void RpcChannelProxy::firedTimedoutCbs(const TimeStamp& now,
                                        std::vector<ClientCallback*>* cbs) {
   auto& cb_list = ctx_.cb_list;
-  ScopedMutex l(&ctx_.mutex);
   while (true) {
     auto it = cb_list.begin();
     auto& cb = *it;
@@ -142,6 +146,7 @@ void RpcChannelProxy::checkTimedout(const TimeStamp& time_stamp) {
   auto& cb_list = ctx_.cb_list;
   auto& cb_map = ctx_.cb_map;
 
+  ScopedMutex l(&ctx_.mutex);
   std::vector<ClientCallback*> cbs;
   firedTimedoutCbs(time_stamp, &cbs);
   for (auto& cb : cbs) {

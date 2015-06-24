@@ -28,9 +28,8 @@ class ClientCallback : public ::google::protobuf::Closure {
     const TimeStamp& timestamp() const {
       return time_stamp_;
     }
-    bool isTimedout(const TimeStamp& now) const {
-      return now - time_stamp_ > 1000 * TimeStamp::kMilliSecsPerSecond;
-    }
+
+    bool isTimedout(const TimeStamp& now) const;
 
     const Message& getRequest() const {
       return *request_;
@@ -86,6 +85,10 @@ class ClientCallback : public ::google::protobuf::Closure {
 
     DISALLOW_COPY_AND_ASSIGN(ClientCallback);
 };
+
+inline bool ClientCallback::isTimedout(const TimeStamp& now) const {
+  return now - time_stamp_ > 1000 * TimeStamp::kMilliSecsPerSecond;
+}
 
 class SyncCallback : public ClientCallback {
   public:
