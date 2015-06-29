@@ -48,8 +48,6 @@ class RpcClient : public ::google::protobuf::RpcChannel {
     Closure* reconnect_closure_;
     scoped_ptr<Closure> close_closure_;
 
-    virtual bool reconnectInternal(uint32 timeout) = 0;
-
   private:
     DISALLOW_COPY_AND_ASSIGN(RpcClient);
 };
