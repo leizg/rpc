@@ -45,20 +45,20 @@ class RpcResponseScheduler : public async::ProActorProtocol::Scheduler {
     virtual ~RpcResponseScheduler() {
     }
 
-    class CbContext {
+    class Delegate {
       public:
-        virtual ~CbContext() {
+        virtual ~Delegate() {
         }
 
-        virtual bool getCallbackById(uint64 id, ClientCallback** cb) = 0;
+        virtual ClientCallback* release(uint64 id) = 0;
     };
-    explicit RpcResponseScheduler(CbContext* cb_ctx)
-        : cb_ctx_(cb_ctx) {
-      DCHECK_NOTNULL(cb_ctx);
+    explicit RpcResponseScheduler(Delegate* delegate)
+        : delegate_(delegate) {
+      DCHECK_NOTNULL(delegate);
     }
 
   private:
-    CbContext* cb_ctx_;
+    Delegate* delegate_;
 
     virtual void dispatch(async::Connection* conn,
                           io::InputStream* input_stream, TimeStamp time_stamp);

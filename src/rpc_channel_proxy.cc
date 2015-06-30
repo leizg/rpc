@@ -3,38 +3,16 @@
 
 #include "io/io_buf.h"
 
-namespace {
+namespace rpc {
 
-class RequestObject : public io::OutVectorObject::IoObject {
-  public:
-    RequestObject() {
-    }
-    virtual ~RequestObject() {
-    }
-
-    void serialize(uint64 id, const std::string& func_name,
-                   const Message& request);
-
-  private:
-    virtual const std::vector<iovec>& ioVec() const {
-      return ios_;
-    }
-
-    std::vector<iovec> ios_;
-    scoped_ptr<io::ExternableChunk> chunk_;
-
-    DISALLOW_COPY_AND_ASSIGN(RequestObject);
-};
-
-void RequestObject::serialize(uint64 id, const std::string& func_name,
-                              const Message& msg) {
+void RpcChannelProxy::Serializer::serialize(const Message& msg) {
   chunk_.reset(new io::ExternableChunk(RPC_HEADER_LENGTH + msg.ByteSize()));
   chunk_->ensureLeft(RPC_HEADER_LENGTH + msg.ByteSize());
 
   MessageHeader* hdr = reinterpret_cast<MessageHeader*>(chunk_->peekW());
   chunk_->skipWrite(RPC_HEADER_LENGTH);
-  hdr->id = id;
-  hdr->fun_id = SuperFastHash(func_name);
+  hdr->id = id_;
+  hdr->fun_id = SuperFastHash(func_);
   hdr->flags = 0;
   SET_LAST_TAG(*hdr);
   hdr->length = msg.ByteSize();
@@ -48,17 +26,18 @@ void RequestObject::serialize(uint64 id, const std::string& func_name,
   ios_.push_back(io);
 }
 
-}
+void RpcChannelProxy::destory() {
+  if (timer_ != nullptr) {
+    timer_->stop();
+    timer_.reset();
+  }
 
-namespace rpc {
-
-RpcChannelProxy::RpcContext::~RpcContext() {
   CallbackList cbs;
   {
-    ScopedMutex l(&mutex);
-    cbs.swap(cb_list);
-    cb_map.clear();
-    cb_list.clear();
+    ScopedMutex l(&mutex_);
+    cbs.swap(cb_list_);
+    cb_map_.clear();
+    cb_list_.clear();
   }
 
   for (auto cb : cbs) {
@@ -66,30 +45,30 @@ RpcChannelProxy::RpcContext::~RpcContext() {
   }
 }
 
-uint64 RpcChannelProxy::RpcContext::push(ClientCallback* cb) {
-  ScopedMutex l(&mutex);
+uint64 RpcChannelProxy::push(ClientCallback* cb) {
+  ScopedMutex l(&mutex_);
   if (!cb->isRetry()) {
     auto cc = reinterpret_cast<CancelCallback*>(cb);
     cc->Ref();
   }
 
-  cb_map[id] = cb;
-  cb_list.push_front(cb);
-  return id++;
+  cb_map_[id_] = cb;
+  cb_list_.push_front(cb);
+  return id_++;
 }
 
-ClientCallback* RpcChannelProxy::RpcContext::get(uint64 id) {
-  ScopedMutex l(&mutex);
-  auto it = cb_map.find(id);
-  if (it == cb_map.end()) {
+ClientCallback* RpcChannelProxy::release(uint64 id) {
+  ScopedMutex l(&mutex_);
+  auto it = cb_map_.find(id);
+  if (it == cb_map_.end()) {
     return nullptr;
   }
 
   auto cb = it->second;
-  cb_map.erase(it);
-  for (auto it = cb_list.begin(); it != cb_list.end(); ++it) {
+  cb_map_.erase(it);
+  for (auto it = cb_list_.begin(); it != cb_list_.end(); ++it) {
     if ((*it)->id() == id) {
-      cb_list.erase(it);
+      cb_list_.erase(it);
       break;
     }
   }
@@ -97,67 +76,49 @@ ClientCallback* RpcChannelProxy::RpcContext::get(uint64 id) {
   return cb;
 }
 
-bool RpcChannelProxy::getCallbackById(uint64 id, ClientCallback** cb) {
-  *cb = ctx_.get(id);
-  return *cb != nullptr;
-}
-
-void RpcChannelProxy::CallMethod(
-    const google::protobuf::MethodDescriptor* method,
-    ::google::protobuf::RpcController* controller,
-    const ::google::protobuf::Message* request,
-    ::google::protobuf::Message* response, ::google::protobuf::Closure* done) {
+void RpcChannelProxy::CallMethod(const MethodDescriptor* method,
+                                 RpcController* controller,
+                                 const Message* request, Message* response,
+                                 ::google::protobuf::Closure* done) {
   ClientCallback* cb = reinterpret_cast<ClientCallback*>(done);
-  uint64 id = ctx_.push(cb);
+  uint64 id = push(cb);
   cb->setContext(id, method, request, response);
   sendCallback(cb);
 }
 
-void RpcChannelProxy::init() {
-  timer_.reset(
-      new async::RepeatTimer(
-          3 * TimeStamp::kMicroSecsPerSecond, ev_mgr_,
-          NewPermanentCallback(this, &RpcChannelProxy::checkTimedout)));
-  timer_->start();
-}
-
 void RpcChannelProxy::sendCallback(ClientCallback* cb) {
-  auto req_obj = new RequestObject;
-  req_obj->serialize(cb->id(), cb->getMethod()->full_name(), cb->getRequest());
-  sender_->send(new io::OutVectorObject(req_obj));
+  auto obj = new Serializer(cb->id(), cb->getMethod()->full_name());
+  obj->serialize(cb->getRequest());
+  sender_->send(new io::OutVectorObject(obj));
 }
 
 void RpcChannelProxy::firedTimedoutCbs(const TimeStamp& now,
                                        std::vector<ClientCallback*>* cbs) {
-  auto& cb_list = ctx_.cb_list;
   while (true) {
-    auto it = cb_list.begin();
+    auto it = cb_list_.begin();
     auto& cb = *it;
     if (!cb->isTimedout(now)) {
       break;
     }
 
-    cb_list.erase(it);
+    cb_list_.erase(it);
     cbs->push_back(cb);
   }
 }
 
 void RpcChannelProxy::checkTimedout(const TimeStamp& time_stamp) {
-  auto& cb_list = ctx_.cb_list;
-  auto& cb_map = ctx_.cb_map;
-
-  ScopedMutex l(&ctx_.mutex);
+  ScopedMutex l(&mutex_);
   std::vector<ClientCallback*> cbs;
   firedTimedoutCbs(time_stamp, &cbs);
   for (auto& cb : cbs) {
     if (!cb->isRetry()) {
-      cb_map.erase(cb->id());
+      cb_map_.erase(cb->id());
       cb->Cancel();
       continue;
     }
 
     cb->reset();
-    cb_list.push_back(cb);
+    cb_list_.push_back(cb);
     sendCallback(cb);
   }
 }

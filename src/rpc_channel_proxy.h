@@ -6,22 +6,21 @@
 namespace io {
 class OutputObject;
 }
-namespace async {
-class EventManager;
-}
 
 namespace rpc {
 
-class RpcChannelProxy : public ::google::protobuf::RpcChannel,
-    public RpcResponseScheduler::CbContext {
-
+class RpcChannelProxy : public RpcResponseScheduler::Delegate {
   public:
     virtual ~RpcChannelProxy() {
-      if (timer_ != nullptr) {
-        timer_->stop();
-        timer_.reset();
-      }
+      destory();
     }
+
+    // threadsafe, can be called from any thread.
+    // same as ::google::protobuf::RpcChannel.
+    // maybe better that inherit from RpcChannel.
+    void CallMethod(const MethodDescriptor* method, RpcController* controller,
+                    const Message* request, Message* response,
+                    ::google::protobuf::Closure* done);
 
     class Sender {
       public:
@@ -35,47 +34,65 @@ class RpcChannelProxy : public ::google::protobuf::RpcChannel,
       DCHECK_NOTNULL(sender);
       DCHECK_NOTNULL(ev_mgr);
       init();
+      id_ = 1;
     }
 
   private:
     Sender* sender_;
     async::EventManager* ev_mgr_;
 
-    struct RpcContext {
-        RpcContext()
-            : id(1) {
-        }
-        ~RpcContext();
+    void destory();
+    void init() {
+      timer_.reset(
+          new async::RepeatTimer(
+              3 * TimeStamp::kMicroSecsPerSecond, ev_mgr_,
+              NewPermanentCallback(this, &RpcChannelProxy::checkTimedout)));
+      timer_->start();
+    }
 
-        uint64 push(ClientCallback* cb);
-        ClientCallback* get(uint64 id);
+    Mutex mutex_;
 
-        uint64 id;
-        Mutex mutex;
+    uint64 id_;
+    typedef std::map<uint64, ClientCallback*> CallbackMap;
+    CallbackMap cb_map_;
+    typedef std::list<ClientCallback*> CallbackList;
+    CallbackList cb_list_;
 
-        typedef std::map<uint64, ClientCallback*> CallbackMap;
-        CallbackMap cb_map;
+    uint64 push(ClientCallback* cb);
+    virtual ClientCallback* release(uint64 id);
 
-        typedef std::list<ClientCallback*> CallbackList;
-        CallbackList cb_list;
-    };
-    RpcContext ctx_;
-
-    virtual bool getCallbackById(uint64 id, ClientCallback** cb);
-    virtual void CallMethod(const ::google::protobuf::MethodDescriptor* method,
-                            ::google::protobuf::RpcController* controller,
-                            const ::google::protobuf::Message* request,
-                            ::google::protobuf::Message* response,
-                            ::google::protobuf::Closure* done);
-
-    void sendCallback(ClientCallback* cb);
-
-    void init();
     void firedTimedoutCbs(const TimeStamp& now,
                           std::vector<ClientCallback*>* cbs);
     void checkTimedout(const TimeStamp& time_stamp);
     scoped_ptr<async::RepeatTimer> timer_;
 
-    DISALLOW_COPY_AND_ASSIGN (RpcChannelProxy);
+    void sendCallback(ClientCallback* cb);
+    class Serializer : public io::OutVectorObject::IoObject {
+      public:
+        Serializer(uint64 id, const std::string& func)
+            : id_(id), func_(func) {
+          DCHECK(!func.empty());
+        }
+        virtual ~Serializer() {
+        }
+
+        void serialize(const Message& request);
+
+      private:
+        uint64 id_;
+        const std::string func_;
+
+        std::vector<iovec> ios_;
+        virtual const std::vector<iovec>& ioVec() const {
+          return ios_;
+        }
+
+        scoped_ptr<io::ExternableChunk> chunk_;
+
+        DISALLOW_COPY_AND_ASSIGN(Serializer);
+    };
+
+    DISALLOW_COPY_AND_ASSIGN(RpcChannelProxy);
 };
+
 }

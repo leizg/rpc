@@ -8,7 +8,6 @@ class EventManager;
 }
 
 namespace rpc {
-
 // RpcClient be called by Service::Stub,
 //   you should not call it directly.
 class RpcClient : public ::google::protobuf::RpcChannel {

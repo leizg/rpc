@@ -13,8 +13,8 @@ void RpcResponseScheduler::dispatch(async::Connection* conn,
                                     TimeStamp time_stamp) {
   const MessageHeader* header = GetRpcHeaderFromConnection(conn);
   // todo: check rpc is resonse message.
-  ClientCallback* cb;
-  if (!cb_ctx_->getCallbackById(header->id, &cb)) {
+  ClientCallback* cb = delegate_->release(header->id);
+  if (cb == nullptr) {
     delete input_stream;
     LOG(WARNING)<< "unknown id: " << header->id;
     return;
@@ -24,8 +24,10 @@ void RpcResponseScheduler::dispatch(async::Connection* conn,
   Message* reply = cb->getResponse();
   if (!reply->ParseFromZeroCopyStream(stream.get())) {
     LOG(WARNING)<< "parse error: " << cb->getMethod()->DebugString();
+    cb->Cancel();
     return;
   }
+
   cb->Run();
 }
 }
